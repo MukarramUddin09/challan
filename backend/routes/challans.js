@@ -2,13 +2,11 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require('puppeteer');
 const Division = require('../models/Division');
 const Challan = require('../models/Challan');
 const { authenticate, authorize } = require('../middleware/auth');
 const { sendChallanEmail, buildChallanEmailHTML } = require('../utils/email');
-const { generatePdfHtml } = require('../utils/pdfTemplate');
-const { generatePdfFromHtml, generateHtmlFallback } = require('../utils/pdfGenerator');
+const { generateChallanPdf } = require('../utils/pdfGenerator');
 
 const router = express.Router();
 
@@ -28,11 +26,11 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  const allowed = ['image/jpeg', 'image/png'];
   if (allowed.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only JPEG, PNG, and WEBP images are allowed.'), false);
+    cb(new Error('Only JPEG and PNG images are allowed.'), false);
   }
 };
 
@@ -391,13 +389,10 @@ router.post('/:id/generate-pdf', authenticate, async (req, res) => {
       }
     }
 
-    // Generate HTML
-    const html = generatePdfHtml(challan, photoBase64);
     const filename = `GHMC-${challan.type || 'Challan'}-${challan.noticeNumber.replace(/\//g, '-')}.pdf`;
 
     try {
-      // Try to generate PDF using Puppeteer with enhanced error handling
-      const pdfBuffer = await generatePdfFromHtml(html, filename);
+      const pdfBuffer = await generateChallanPdf(challan, photoBase64);
 
       res.type('application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

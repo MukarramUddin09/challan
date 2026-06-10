@@ -5,8 +5,7 @@ const EmailRecipient = require('../models/EmailRecipient');
 const Violation = require('../models/Violation');
 const Division = require('../models/Division');
 const { authenticate, authorize } = require('../middleware/auth');
-const { generatePdfFromHtml } = require('../utils/pdfGenerator');
-const { generateReportHtml } = require('../utils/reportTemplate');
+const { generateReportPdf } = require('../utils/pdfGenerator');
 
 const router = express.Router();
 
@@ -437,10 +436,9 @@ router.post('/reports', async (req, res) => {
 
     const challans = await Challan.find({ dateTime: { $gte: start, $lte: end } }).sort({ dateTime: -1 }).lean();
 
-    const html = generateReportHtml(challans, start, end);
     const filename = `GHMC-Violations-Report-${startDate}-${endDate}.pdf`;
 
-    const pdfBuffer = await generatePdfFromHtml(html, filename);
+    const pdfBuffer = await generateReportPdf(challans, start, end);
 
     res.type('application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -574,4 +572,3 @@ router.delete('/divisions/:id', async (req, res) => {
 });
 
 module.exports = router;
-
