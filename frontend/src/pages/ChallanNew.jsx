@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
@@ -13,6 +13,7 @@ const ChallanNew = () => {
   const [selectedViolations, setSelectedViolations] = useState([]);
   const [photo, setPhoto] = useState(null);
   const [loadingData, setLoadingData] = useState(true);
+  const submittingRef = useRef(false);
   
   const [formData, setFormData] = useState({
     division: user?.division || '',
@@ -124,11 +125,20 @@ const ChallanNew = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+
     if (selectedViolations.length === 0) {
       toast.error('Select at least one violation type');
       return;
     }
 
+    const fineAmount = Number(formData.fineAmount);
+    if (!Number.isFinite(fineAmount) || fineAmount < 0) {
+      toast.error('Enter a valid fine amount');
+      return;
+    }
+
+    submittingRef.current = true;
     setLoading(true);
     try {
       const data = new FormData();
@@ -156,6 +166,7 @@ const ChallanNew = () => {
     } catch (err) {
       toast.error(err.response?.data?.message || `Failed to create ${formData.type}`);
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -261,7 +272,18 @@ const ChallanNew = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="label">Fine Amount (₹) *</label>
-            <input type="number" name="fineAmount" value={formData.fineAmount} onChange={handleChange} className="input" min="0" required />
+            <input
+              type="number"
+              name="fineAmount"
+              value={formData.fineAmount}
+              onChange={handleChange}
+              onWheel={(e) => e.currentTarget.blur()}
+              className="input"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              required
+            />
           </div>
           <div>
             <label className="label">Officer Name *</label>
@@ -276,7 +298,7 @@ const ChallanNew = () => {
 
         <div>
           <label className="label">Photo Evidence</label>
-          <input type="file" accept="image/*" onChange={handlePhotoChange} className="input" />
+          <input type="file" accept="image/jpeg,image/png" onChange={handlePhotoChange} className="input" />
           {photo && <p className="text-sm text-green-600 mt-2">✓ {photo.name}</p>}
         </div>
 

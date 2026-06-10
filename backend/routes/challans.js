@@ -16,15 +16,6 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `photo-${uniqueSuffix}${ext}`);
-  }
-});
-
 const fileFilter = (req, file, cb) => {
   const allowed = ['image/jpeg', 'image/png'];
   if (allowed.includes(file.mimetype)) {
@@ -35,22 +26,46 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB
 });
 
-// Helper: find uploaded photo file for a given notice number
-function findPhotoByNotice(noticeNumber) {
-  const safe = String(noticeNumber).replace(/\//g, '-');
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// New challans persist the exact filename. The strict notice-number fallback
+// only exists for records created before photoFilename was introduced.
+function findPhotoForChallan(challan) {
+  if (challan.photoFilename) {
+    const exactPath = path.join(uploadsDir, path.basename(challan.photoFilename));
+    return fs.existsSync(exactPath) ? path.basename(challan.photoFilename) : null;
+  }
+
+  const safeNotice = String(challan.noticeNumber).replace(/\//g, '-');
+  const legacyPattern = new RegExp(`^${escapeRegExp(safeNotice)}\\.(?:jpe?g|png)$`, 'i');
+
   try {
     const files = fs.readdirSync(uploadsDir);
-    const found = files.find(f => f.includes(safe));
+    const found = files.find((filename) => legacyPattern.test(filename));
     return found || null;
   } catch (e) {
     return null;
   }
 }
+
+const parseFineAmount = (input) => {
+  const normalized = String(input ?? '').trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const amount = Number(normalized);
+  if (!Number.isSafeInteger(Math.round(amount * 100)) || amount < 0) {
+    return null;
+  }
+
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+};
 
 /**
  * Generate unique notice number: GHMC/{division}/{sequence}
@@ -143,7 +158,7 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
     console.log('--- Create Challan Request Received ---');
     console.log('Content-Type:', req.headers['content-type']);
     console.log('Body keys:', Object.keys(req.body));
-    if (req.file) console.log('Uploaded file:', req.file.filename, req.file.mimetype, req.file.size);
+    if (req.file) console.log('Uploaded file:', req.file.originalname, req.file.mimetype, req.file.size);
     else console.log('No file uploaded');
 
     const {
@@ -192,6 +207,14 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       });
     }
 
+    const parsedFineAmount = parseFineAmount(fineAmount);
+    if (parsedFineAmount === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Fine amount must be a valid non-negative number with up to 2 decimal places.'
+      });
+    }
+
     // Generate notice number
     const useDivision = req.user.role === 'worker'
       ? req.user.division
@@ -211,7 +234,7 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       violatorName,
       violatorPhone,
       violationType: parsedViolations,
-      fineAmount: parseFloat(fineAmount),
+      fineAmount: parsedFineAmount,
       officerName,
       officerDesignation,
       dateTime: dateTime ? new Date(dateTime) : new Date(),
@@ -219,29 +242,33 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       createdBy: req.user._id
     };
 
-    // Handle photo upload: rename uploaded file to include notice number but do not persist metadata
-    if (req.file) {
-      try {
-        const ext = path.extname(req.file.originalname) || path.extname(req.file.filename) || '';
-        const safeNotice = noticeNumber.replace(/\//g, '-');
-        const newName = `${safeNotice}${ext}`;
-        const oldPath = path.join(uploadsDir, req.file.filename);
-        const newPath = path.join(uploadsDir, newName);
-        fs.renameSync(oldPath, newPath);
-      } catch (e) {
-        console.warn('Failed to rename uploaded photo:', e.message);
-      }
-    }
-
     const challan = new Challan(challanData);
     await challan.save();
+
+    if (req.file) {
+      const ext = req.file.mimetype === 'image/png' ? '.png' : '.jpg';
+      const photoFilename = `${challan._id}${ext}`;
+      const photoPath = path.join(uploadsDir, photoFilename);
+
+      try {
+        fs.writeFileSync(photoPath, req.file.buffer, { flag: 'wx' });
+        challan.photoFilename = photoFilename;
+        await challan.save();
+      } catch (photoError) {
+        if (fs.existsSync(photoPath)) {
+          fs.unlinkSync(photoPath);
+        }
+        await Challan.findByIdAndDelete(challan._id);
+        throw new Error(`Failed to store photo evidence: ${photoError.message}`);
+      }
+    }
 
     const populated = await Challan.findById(challan._id)
       .populate('createdBy', 'name email division');
 
-    // Include a photoUrl if the uploads folder contains a file matching the notice number
+    // Include the exact photo associated with this challan.
     const populatedObj = populated.toObject();
-    const foundPhoto = findPhotoByNotice(populatedObj.noticeNumber);
+    const foundPhoto = findPhotoForChallan(populatedObj);
     populatedObj.photoUrl = foundPhoto ? `/uploads/${foundPhoto}` : null;
 
     res.status(201).json({
@@ -283,9 +310,9 @@ router.get('/:id', authenticate, async (req, res) => {
       });
     }
 
-    // Attach photoUrl if available on disk (photos are not stored in DB)
+    // Attach photoUrl for the filename persisted on this challan.
     const challan = challanDoc.toObject();
-    const found = findPhotoByNotice(challan.noticeNumber);
+    const found = findPhotoForChallan(challan);
     challan.photoUrl = found ? `/uploads/${found}` : null;
 
     res.json({ success: true, data: { challan } });
@@ -322,9 +349,9 @@ router.post('/:id/send-email', authenticate, async (req, res) => {
     const subject = `GHMC Challan Notice - ${challan.violatorName} - ${new Date(challan.dateTime).toLocaleDateString('en-IN')}`;
     const html = buildChallanEmailHTML(challan);
 
-    // Prepare photo attachment if a matching file exists on disk
+    // Prepare the photo attached to this exact challan.
     let attachment = null;
-    const foundPhoto = findPhotoByNotice(challan.noticeNumber);
+    const foundPhoto = findPhotoForChallan(challan);
     if (foundPhoto) {
       const photoPath = path.join(uploadsDir, foundPhoto);
       if (fs.existsSync(photoPath)) {
@@ -375,7 +402,7 @@ router.post('/:id/generate-pdf', authenticate, async (req, res) => {
 
     // Read photo as base64 if a matching file exists on disk
     let photoBase64 = null;
-    const foundPhotoForPdf = findPhotoByNotice(challan.noticeNumber);
+    const foundPhotoForPdf = findPhotoForChallan(challan);
     if (foundPhotoForPdf) {
       const photoPath = path.join(uploadsDir, foundPhotoForPdf);
       if (fs.existsSync(photoPath)) {

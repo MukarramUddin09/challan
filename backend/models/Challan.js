@@ -51,7 +51,17 @@ const challanSchema = new mongoose.Schema({
   fineAmount: {
     type: Number,
     required: [true, 'Fine amount is required'],
-    min: 0
+    min: 0,
+    set: (value) => {
+      const amount = Number(value);
+      return Number.isFinite(amount)
+        ? Math.round((amount + Number.EPSILON) * 100) / 100
+        : value;
+    },
+    validate: {
+      validator: (value) => Number.isSafeInteger(Math.round(value * 100)),
+      message: 'Fine amount is outside the supported range'
+    }
   },
   officerName: {
     type: String,
@@ -71,7 +81,11 @@ const challanSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  // Photo metadata intentionally not persisted; uploaded images are stored on disk only
+  photoFilename: {
+    type: String,
+    trim: true,
+    default: null
+  },
   sentToEmails: [{
     type: String
   }],
