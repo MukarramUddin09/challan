@@ -1,18 +1,32 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns').promises;
 
-// Create reusable transporter
-const createTransporter = () => {
+// Render may resolve Gmail to IPv6 even when the service has no IPv6 route.
+// Resolve an A record ourselves so the SMTP connection always uses IPv4.
+const createTransporter = async () => {
+  const addresses = await dns.resolve4('smtp.gmail.com');
+  const smtpAddress = addresses[0];
+
+  if (!smtpAddress) {
+    throw new Error('Unable to resolve an IPv4 address for smtp.gmail.com');
+  }
+
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
+    host: smtpAddress,
     port: 587,
     secure: false,
+    requireTLS: true,
     auth: {
       user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_APP_PASSWORD
     },
     tls: {
-      rejectUnauthorized: false
-    }
+      servername: 'smtp.gmail.com',
+      rejectUnauthorized: true
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000
   });
 };
 
@@ -28,7 +42,7 @@ const createTransporter = () => {
  * @param {string} options.attachment.contentType - MIME type
  */
 const sendChallanEmail = async ({ to, subject, html, attachment }) => {
-  const transporter = createTransporter();
+  const transporter = await createTransporter();
 
   const mailOptions = {
     from: `"GHMC Enforcement" <${process.env.GMAIL_USER}>`,
