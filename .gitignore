@@ -9,3 +9,5 @@ backend/pdf-test-output.pdf
 frontend/dist/
 backend/.env
 .env
+backend/.env
+.env
