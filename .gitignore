@@ -1,0 +1,9 @@
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+backend/uploads/
+backend/pdf-*-test.pdf
+backend/pdf-test-output.pdf
+**/node_modules/
+frontend/dist/
