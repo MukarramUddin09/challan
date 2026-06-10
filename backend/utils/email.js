@@ -1,34 +1,48 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns').promises;
+const fs = require('fs');
+const https = require('https');
 
-// Render may resolve Gmail to IPv6 even when the service has no IPv6 route.
-// Resolve an A record ourselves so the SMTP connection always uses IPv4.
-const createTransporter = async () => {
-  const addresses = await dns.resolve4('smtp.gmail.com');
-  const smtpAddress = addresses[0];
-
-  if (!smtpAddress) {
-    throw new Error('Unable to resolve an IPv4 address for smtp.gmail.com');
-  }
-
-  return nodemailer.createTransport({
-    host: smtpAddress,
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD
+const postBrevoEmail = (payload) => new Promise((resolve, reject) => {
+  const body = JSON.stringify(payload);
+  const request = https.request({
+    hostname: 'api.brevo.com',
+    path: '/v3/smtp/email',
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'api-key': process.env.BREVO_API_KEY,
+      'content-type': 'application/json',
+      'content-length': Buffer.byteLength(body)
     },
-    tls: {
-      servername: 'smtp.gmail.com',
-      rejectUnauthorized: true
-    },
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000
+    timeout: 30000
+  }, (response) => {
+    const chunks = [];
+    response.on('data', (chunk) => chunks.push(chunk));
+    response.on('end', () => {
+      const responseText = Buffer.concat(chunks).toString('utf8');
+      let responseBody = {};
+
+      try {
+        responseBody = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        responseBody = { message: responseText };
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return resolve(responseBody);
+      }
+
+      const message = responseBody.message || `Brevo returned HTTP ${response.statusCode}`;
+      return reject(new Error(`Brevo email failed: ${message}`));
+    });
   });
-};
+
+  request.on('timeout', () => {
+    request.destroy(new Error('Brevo email request timed out'));
+  });
+  request.on('error', reject);
+  request.write(body);
+  request.end();
+});
 
 /**
  * Send challan email with photo attachment
@@ -42,26 +56,33 @@ const createTransporter = async () => {
  * @param {string} options.attachment.contentType - MIME type
  */
 const sendChallanEmail = async ({ to, subject, html, attachment }) => {
-  const transporter = await createTransporter();
+  if (!process.env.BREVO_API_KEY) {
+    throw new Error('BREVO_API_KEY is not configured');
+  }
 
-  const mailOptions = {
-    from: `"GHMC Enforcement" <${process.env.GMAIL_USER}>`,
-    to: to.join(', '),
+  const senderEmail = process.env.EMAIL_FROM;
+  if (!senderEmail) {
+    throw new Error('EMAIL_FROM is not configured');
+  }
+
+  const payload = {
+    sender: {
+      name: process.env.EMAIL_FROM_NAME || 'GHMC Enforcement',
+      email: senderEmail
+    },
+    to: to.map((email) => ({ email })),
     subject,
-    html,
-    attachments: []
+    htmlContent: html
   };
 
   if (attachment && attachment.path) {
-    mailOptions.attachments.push({
-      filename: attachment.filename,
-      path: attachment.path,
-      contentType: attachment.contentType
-    });
+    payload.attachment = [{
+      name: attachment.filename,
+      content: fs.readFileSync(attachment.path).toString('base64')
+    }];
   }
 
-  const info = await transporter.sendMail(mailOptions);
-  return info;
+  return postBrevoEmail(payload);
 };
 
 /**
