@@ -37,7 +37,7 @@ const ChallanList = () => {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold text-navy-900">Challans</h1>
         <Link to="/challans/new" className="btn-primary">
           + New Challan
@@ -64,7 +64,8 @@ const ChallanList = () => {
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px]">
             <thead className="bg-navy-50">
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-navy-900">Notice #</th>
@@ -86,15 +87,17 @@ const ChallanList = () => {
                     {new Date(c.dateTime).toLocaleDateString('en-IN')}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <Link to={`/challans/${c._id}`} className="text-navy-700 hover:text-navy-900 font-semibold">
-                      View
-                    </Link>
+                    <div className="flex items-center gap-4">
+                      <Link to={`/challans/${c._id}`} className="text-navy-700 hover:text-navy-900 font-semibold">View</Link>
+                      <Link to={`/challans/${c._id}/edit`} className="text-amber-700 hover:text-amber-900 font-semibold">Edit</Link>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="px-6 py-4 bg-gray-50 flex justify-between items-center">
+          </div>
+          <div className="px-4 sm:px-6 py-4 bg-gray-50 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <span className="text-sm text-gray-600">Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total}</span>
             <div className="flex gap-2">
               <button

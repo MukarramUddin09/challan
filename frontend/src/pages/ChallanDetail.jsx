@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import api, { resolveApiAssetUrl } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -172,12 +172,17 @@ const ChallanDetail = () => {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <button onClick={() => navigate('/challans')} className="mb-6 text-navy-700 hover:text-navy-900">
-        ← Back to Challans
-      </button>
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <button onClick={() => navigate('/challans')} className="text-navy-700 hover:text-navy-900">
+          &larr; Back to Challans
+        </button>
+        <Link to={`/challans/${id}/edit`} className="btn-primary btn-sm">
+          Edit Challan
+        </Link>
+      </div>
 
-      <div className="card p-8 mb-6">
+      <div className="card p-5 sm:p-8 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div>
             <p className="text-sm text-gray-600">Notice Number</p>
@@ -239,13 +244,20 @@ const ChallanDetail = () => {
           <p className="font-semibold text-navy-900">{challan.officerName} - {challan.officerDesignation}</p>
         </div>
 
+        {challan.legalText && (
+          <div className="border-t mt-6 pt-6">
+            <p className="text-sm font-semibold text-gray-700 mb-2">Legal Notice</p>
+            <p className="text-sm text-gray-700 leading-6 whitespace-pre-wrap">{challan.legalText}</p>
+          </div>
+        )}
+
         {challan.photoUrl && (
           <div className="border-t mt-6 pt-6">
             <p className="text-sm font-semibold text-gray-700 mb-3">Photo Evidence</p>
             <img
               src={resolveApiAssetUrl(challan.photoUrl)}
               alt="Evidence"
-              className="max-w-md max-h-64 rounded border"
+              className="w-full max-w-md max-h-80 object-contain rounded border"
             />
           </div>
         )}

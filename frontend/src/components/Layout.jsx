@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ghmcLogo from '../assets/Screenshot 2026-06-08 011808.png';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +27,17 @@ const Layout = ({ children }) => {
     { path: '/admin/divisions', label: 'Area Divisions', icon: MapIcon },
   ];
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path === '/challans') {
+      return location.pathname === path || /^\/challans\/[^/]+(?:\/edit)?$/.test(location.pathname);
+    }
+    return location.pathname === path;
+  };
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-ghmc-light flex">

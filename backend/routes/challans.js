@@ -67,6 +67,20 @@ const parseFineAmount = (input) => {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 };
 
+const parseViolations = (violationType) => {
+  try {
+    return typeof violationType === 'string'
+      ? JSON.parse(violationType)
+      : violationType;
+  } catch {
+    return Array.isArray(violationType) ? violationType : [violationType];
+  }
+};
+
+const canAccessChallan = (user, challan) => (
+  user.role === 'admin' || challan.division === user.division
+);
+
 /**
  * Generate unique notice number: GHMC/{division}/{sequence}
  */
@@ -177,14 +191,7 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
     } = req.body;
 
     // Parse violationType (sent as JSON string from FormData)
-    let parsedViolations;
-    try {
-      parsedViolations = typeof violationType === 'string'
-        ? JSON.parse(violationType)
-        : violationType;
-    } catch {
-      parsedViolations = Array.isArray(violationType) ? violationType : [violationType];
-    }
+    const parsedViolations = parseViolations(violationType);
 
     if (!parsedViolations || parsedViolations.length === 0) {
       return res.status(400).json({
@@ -290,6 +297,125 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
 });
 
 /**
+ * PUT /api/challans/:id
+ * Update challan details and optionally replace or remove photo evidence.
+ */
+router.put('/:id', authenticate, authorize('worker', 'admin'), upload.single('photo'), async (req, res) => {
+  let newPhotoPath = null;
+
+  try {
+    const challan = await Challan.findById(req.params.id);
+    if (!challan) {
+      return res.status(404).json({ success: false, message: 'Challan not found.' });
+    }
+
+    if (!canAccessChallan(req.user, challan)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only edit challans from your division.'
+      });
+    }
+
+    const parsedViolations = parseViolations(req.body.violationType);
+    if (!Array.isArray(parsedViolations) || parsedViolations.filter(Boolean).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one violation type must be selected.'
+      });
+    }
+
+    const parsedFineAmount = parseFineAmount(req.body.fineAmount);
+    if (parsedFineAmount === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Fine amount must be a valid non-negative number with up to 2 decimal places.'
+      });
+    }
+
+    const targetDivision = req.user.role === 'admin'
+      ? req.body.division
+      : req.user.division;
+
+    if (!targetDivision || !req.body.wardNumber || !req.body.wardName || !req.body.violatorPhone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Division, ward details, and violator phone number are required.'
+      });
+    }
+
+    const divisionDoc = await Division.findOne({ name: targetDivision });
+    const oldPhotoFilename = findPhotoForChallan(challan);
+    let nextPhotoFilename = challan.photoFilename;
+
+    if (req.file) {
+      const ext = req.file.mimetype === 'image/png' ? '.png' : '.jpg';
+      nextPhotoFilename = `${challan._id}-${Date.now()}${ext}`;
+      newPhotoPath = path.join(uploadsDir, nextPhotoFilename);
+      fs.writeFileSync(newPhotoPath, req.file.buffer, { flag: 'wx' });
+    } else if (String(req.body.removePhoto).toLowerCase() === 'true') {
+      nextPhotoFilename = null;
+    }
+
+    Object.assign(challan, {
+      division: targetDivision,
+      divisionCode: divisionDoc?.code || '',
+      wardNumber: req.body.wardNumber,
+      wardName: req.body.wardName,
+      location: req.body.location,
+      violatorName: req.body.violatorName,
+      violatorPhone: req.body.violatorPhone,
+      violationType: parsedViolations.filter(Boolean),
+      fineAmount: parsedFineAmount,
+      officerName: req.body.officerName,
+      officerDesignation: req.body.officerDesignation,
+      dateTime: req.body.dateTime ? new Date(req.body.dateTime) : challan.dateTime,
+      type: req.body.type || challan.type,
+      legalText: req.body.legalText,
+      photoFilename: nextPhotoFilename
+    });
+
+    await challan.save();
+    newPhotoPath = null;
+
+    if ((req.file || nextPhotoFilename === null) && oldPhotoFilename) {
+      const oldPhotoPath = path.join(uploadsDir, path.basename(oldPhotoFilename));
+      if (fs.existsSync(oldPhotoPath) && oldPhotoPath !== newPhotoPath) {
+        try {
+          fs.unlinkSync(oldPhotoPath);
+        } catch (cleanupError) {
+          console.warn('Unable to remove previous challan photo:', cleanupError.message);
+        }
+      }
+    }
+
+    const populated = await Challan.findById(challan._id)
+      .populate('createdBy', 'name email division');
+    const updated = populated.toObject();
+    const foundPhoto = findPhotoForChallan(updated);
+    updated.photoUrl = foundPhoto ? `/uploads/${foundPhoto}` : null;
+
+    res.json({
+      success: true,
+      message: 'Challan updated successfully!',
+      data: { challan: updated }
+    });
+  } catch (err) {
+    if (newPhotoPath && fs.existsSync(newPhotoPath)) {
+      fs.unlinkSync(newPhotoPath);
+    }
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map(e => e.message);
+      return res.status(400).json({ success: false, message: messages.join('. ') });
+    }
+    if (err.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid challan ID.' });
+    }
+    console.error('Update challan error:', err);
+    res.status(500).json({ success: false, message: 'Server error updating challan.' });
+  }
+});
+
+/**
  * GET /api/challans/:id
  * Get single challan detail
  */
@@ -303,7 +429,7 @@ router.get('/:id', authenticate, async (req, res) => {
     }
 
     // Workers can only see challans from their division
-    if (req.user.role === 'worker' && challanDoc.division !== req.user.division) {
+    if (!canAccessChallan(req.user, challanDoc)) {
       return res.status(403).json({
         success: false,
         message: 'You can only view challans from your division.'
@@ -343,6 +469,12 @@ router.post('/:id/send-email', authenticate, async (req, res) => {
     const challan = await Challan.findById(req.params.id);
     if (!challan) {
       return res.status(404).json({ success: false, message: 'Challan not found.' });
+    }
+    if (!canAccessChallan(req.user, challan)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only send challans from your division.'
+      });
     }
 
     // Build email content
@@ -398,6 +530,12 @@ router.post('/:id/generate-pdf', authenticate, async (req, res) => {
     const challan = await Challan.findById(req.params.id);
     if (!challan) {
       return res.status(404).json({ success: false, message: 'Challan not found.' });
+    }
+    if (!canAccessChallan(req.user, challan)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only generate challans from your division.'
+      });
     }
 
     // Read photo as base64 if a matching file exists on disk

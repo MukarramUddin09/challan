@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import ChallanList from './pages/ChallanList';
 import ChallanNew from './pages/ChallanNew';
 import ChallanDetail from './pages/ChallanDetail';
+import ChallanEdit from './pages/ChallanEdit';
 import AdminUsers from './pages/AdminUsers';
 import AdminEmails from './pages/AdminEmails';
 import AdminViolations from './pages/AdminViolations';
@@ -88,6 +89,7 @@ function App() {
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/challans" element={<ProtectedRoute><ChallanList /></ProtectedRoute>} />
       <Route path="/challans/new" element={<ProtectedRoute><ChallanNew /></ProtectedRoute>} />
+      <Route path="/challans/:id/edit" element={<ProtectedRoute><ChallanEdit /></ProtectedRoute>} />
       <Route path="/challans/:id" element={<ProtectedRoute><ChallanDetail /></ProtectedRoute>} />
 
       {/* Admin Routes */}

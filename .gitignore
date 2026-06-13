@@ -6,6 +6,7 @@ backend/uploads/
 backend/pdf-*-test.pdf
 backend/pdf-test-output.pdf
 **/node_modules/
+**/*.log
 frontend/dist/
 backend/.env
 .env
