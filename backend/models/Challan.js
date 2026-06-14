@@ -77,6 +77,12 @@ const challanSchema = new mongoose.Schema({
     type: String,
     default: 'Whereas it is found that without the written permission of Competent authority you have placed / deposited on the roads / footpaths / public places / open spaces material/goods/articles or have committed the violation as mentioned in the notice below and thereby violated the provisions of GHMC Act / Public Health Act and whereas you are liable to pay the fine amount as mentioned, you are hereby requested to pay the said fine immediately.'
   },
+  officerNote: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Officer note cannot exceed 500 characters'],
+    default: ''
+  },
   dateTime: {
     type: Date,
     default: Date.now
@@ -106,6 +112,7 @@ const challanSchema = new mongoose.Schema({
 // Index for efficient querying
 challanSchema.index({ division: 1, createdAt: -1 });
 challanSchema.index({ createdBy: 1 });
+challanSchema.index({ violatorPhone: 1, dateTime: -1 });
 // `noticeNumber` already declares `unique: true` on the field which creates
 // an index. Avoid declaring the same index twice to prevent duplicate-index
 // warnings from Mongoose.

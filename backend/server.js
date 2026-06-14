@@ -25,6 +25,7 @@ const EmailRecipient = require('./models/EmailRecipient');
 const Violation = require('./models/Violation');
 const Division = require('./models/Division');
 const { authenticate } = require('./middleware/auth');
+const { getIndiaTodayRange } = require('./utils/dateTime');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -92,10 +93,7 @@ app.get('/api/stats/my-division', authenticate, async (req, res) => {
     });
 
     // Violations sent today for this division
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
+    const { start: startOfToday, end: endOfToday } = getIndiaTodayRange();
     const violationsSentToday = await Challan.countDocuments({
       division,
       emailSentAt: { $gte: startOfToday, $lte: endOfToday }

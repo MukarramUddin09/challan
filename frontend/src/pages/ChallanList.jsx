@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
+import { formatDateTime } from '../lib/constants';
 
 const ChallanList = () => {
   const { user } = useAuth();
@@ -12,6 +13,7 @@ const ChallanList = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
+  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     fetchChallans();
@@ -34,6 +36,49 @@ const ChallanList = () => {
   };
 
   const pages = Math.ceil(total / limit);
+  const searchDigits = search.replace(/\D/g, '');
+  const normalizedSearch = searchDigits.length > 10 ? searchDigits.slice(-10) : searchDigits;
+  const isExactPhoneResult = normalizedSearch.length >= 7
+    && challans.length > 0
+    && challans.every(c => {
+      const digits = c.violatorPhone?.replace(/\D/g, '') || '';
+      return (digits.length > 10 ? digits.slice(-10) : digits) === normalizedSearch;
+    });
+
+  const handlePrintByPhone = async () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow pop-ups to print the combined PDF.');
+      return;
+    }
+
+    try {
+      setPrinting(true);
+      const response = await api.post('/challans/print-by-phone', {
+        violatorPhone: search
+      }, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(response.data);
+      printWindow.document.write(`
+        <html>
+          <head><title>Print Violator Challans</title></head>
+          <body style="margin:0">
+            <iframe
+              src="${url}"
+              style="width:100%;height:100vh;border:0"
+              onload="setTimeout(function(){ window.print(); }, 500)"
+            ></iframe>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      toast.success(`Prepared ${total} challans for printing`);
+    } catch (err) {
+      printWindow.close();
+      toast.error('Failed to prepare combined challans');
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   return (
     <div className="p-6">
@@ -47,11 +92,21 @@ const ChallanList = () => {
       <div className="card p-6 mb-6">
         <input
           type="text"
-          placeholder="Search by violator name or notice number..."
+          placeholder="Search by violator name, phone number, notice number, or location..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="input w-full"
         />
+        {isExactPhoneResult && total > 3 && (
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-sm text-gray-600">
+              Found {total} challans for phone {search}.
+            </p>
+            <button onClick={handlePrintByPhone} disabled={printing} className="btn-primary py-2">
+              {printing ? 'Preparing...' : `Print All ${total} Challans`}
+            </button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -70,6 +125,7 @@ const ChallanList = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-navy-900">Notice #</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-navy-900">Violator</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-navy-900">Phone</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-navy-900">Location</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-navy-900">Fine</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-navy-900">Date</th>
@@ -81,10 +137,11 @@ const ChallanList = () => {
                 <tr key={c._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-mono text-navy-900">{c.noticeNumber}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{c.violatorName}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{c.violatorPhone || '-'}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{c.location}</td>
                   <td className="px-6 py-4 text-sm font-semibold text-green-600">₹{c.fineAmount}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
-                    {new Date(c.dateTime).toLocaleDateString('en-IN')}
+                    {formatDateTime(c.dateTime)}
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <div className="flex items-center gap-4">

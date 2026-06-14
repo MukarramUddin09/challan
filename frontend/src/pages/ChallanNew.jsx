@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
+import { indiaDateTimeLocalToIso, toDateTimeLocalInput } from '../lib/constants';
 
 const ChallanNew = () => {
   const { user, isAdmin } = useAuth();
@@ -25,8 +26,9 @@ const ChallanNew = () => {
     fineAmount: '',
     officerName: user?.name || '',
     officerDesignation: '',
-    dateTime: new Date().toISOString().split('T')[0],
-    type: 'Challan'
+    dateTime: toDateTimeLocalInput(),
+    type: 'Challan',
+    officerNote: ''
   });
 
   // Fetch divisions and violations on mount
@@ -149,11 +151,12 @@ const ChallanNew = () => {
       data.append('fineAmount', formData.fineAmount);
       data.append('officerName', formData.officerName);
       data.append('officerDesignation', formData.officerDesignation);
-      data.append('dateTime', new Date(formData.dateTime).toISOString());
+      data.append('dateTime', indiaDateTimeLocalToIso(formData.dateTime));
       data.append('type', formData.type);
       data.append('violatorPhone', formData.violatorPhone);
       data.append('wardNumber', formData.wardNumber);
       data.append('wardName', formData.wardName);
+      data.append('officerNote', formData.officerNote);
       if (photo) data.append('photo', photo);
 
       // Let the browser set Content-Type (including boundary) for FormData
@@ -210,7 +213,7 @@ const ChallanNew = () => {
           </div>
           <div>
             <label className="label">Date & Time *</label>
-            <input type="date" name="dateTime" value={formData.dateTime} onChange={handleChange} className="input" required />
+            <input type="datetime-local" step="1" name="dateTime" value={formData.dateTime} onChange={handleChange} className="input" required />
           </div>
         </div>
 
@@ -300,6 +303,18 @@ const ChallanNew = () => {
           <label className="label">Photo Evidence</label>
           <input type="file" accept="image/jpeg,image/png" onChange={handlePhotoChange} className="input" />
           {photo && <p className="text-sm text-green-600 mt-2">✓ {photo.name}</p>}
+        </div>
+
+        <div>
+          <label className="label">Officer Note</label>
+          <textarea
+            name="officerNote"
+            value={formData.officerNote}
+            onChange={handleChange}
+            className="input min-h-24 resize-y"
+            maxLength="500"
+            placeholder="Add a short note for this challan"
+          />
         </div>
 
         <div className="flex gap-3 pt-6">

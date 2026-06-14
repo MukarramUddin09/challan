@@ -1,6 +1,8 @@
+const { formatDate, formatDateTime } = require('./dateTime');
+
 function generateReportHtml(challans, startDate, endDate) {
   const title = 'Violations Report';
-  const period = `${new Date(startDate).toLocaleDateString('en-IN')} - ${new Date(endDate).toLocaleDateString('en-IN')}`;
+  const period = `${formatDate(startDate)} - ${formatDate(endDate)}`;
   const fs = require('fs');
   const path = require('path');
   let embeddedLogo = null;
@@ -19,10 +21,9 @@ function generateReportHtml(challans, startDate, endDate) {
       <td style="padding:8px;border:1px solid #ddd">${c.division}</td>
       <td style="padding:8px;border:1px solid #ddd">${c.wardNumber || ''}</td>
       <td style="padding:8px;border:1px solid #ddd">${c.location || ''}</td>
-      <td style="padding:8px;border:1px solid #ddd">${c.violatorName || ''}</td>
+      <td style="padding:8px;border:1px solid #ddd">${c.violatorName || ''}<br>${c.violatorPhone || ''}<br>${formatDateTime(c.dateTime)}</td>
       <td style="padding:8px;border:1px solid #ddd">${Array.isArray(c.violationType) ? c.violationType.join(', ') : c.violationType}</td>
       <td style="padding:8px;border:1px solid #ddd">₹${(c.fineAmount || 0).toLocaleString('en-IN')}</td>
-      <td style="padding:8px;border:1px solid #ddd">${new Date(c.dateTime).toLocaleString('en-IN')}</td>
     </tr>
   `).join('');
 
@@ -45,10 +46,10 @@ function generateReportHtml(challans, startDate, endDate) {
       ${embeddedLogo ? `<img src="${embeddedLogo}" style="height:56px; margin-bottom:8px;" />` : ''}
       <h1>${title}</h1>
       <p class="period">Report period: ${period}</p>
-      <p class="period">Generated on: ${new Date().toLocaleString('en-IN')}</p>
+      <p class="period">Generated on: ${formatDateTime(new Date())}</p>
     </div>
 
-    <p>This report lists all violations encountered during the selected period. It includes notice numbers, division, ward, location, violator name, violation types, fines and occurrence date/time.</p>
+    <p>This report lists all violations encountered during the selected period. It includes notice numbers, division, ward, location, violator name and phone, violation types, fines and occurrence date/time.</p>
 
     <table>
       <thead>
@@ -58,10 +59,9 @@ function generateReportHtml(challans, startDate, endDate) {
           <th style="padding:8px;border:1px solid #ddd">Division</th>
           <th style="padding:8px;border:1px solid #ddd">Ward</th>
           <th style="padding:8px;border:1px solid #ddd">Location</th>
-          <th style="padding:8px;border:1px solid #ddd">Violator</th>
+          <th style="padding:8px;border:1px solid #ddd">Violator / Phone / Date-Time</th>
           <th style="padding:8px;border:1px solid #ddd">Violations</th>
           <th style="padding:8px;border:1px solid #ddd">Fine</th>
-          <th style="padding:8px;border:1px solid #ddd">Date/Time</th>
         </tr>
       </thead>
       <tbody>

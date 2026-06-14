@@ -1,6 +1,7 @@
 const express = require('express');
 const User = require('../models/User');
 const Challan = require('../models/Challan');
+const { getIndiaDateRange, getIndiaTodayRange } = require('../utils/dateTime');
 const EmailRecipient = require('../models/EmailRecipient');
 const Violation = require('../models/Violation');
 const Division = require('../models/Division');
@@ -138,10 +139,7 @@ router.get('/stats', async (req, res) => {
     const emailsSent = await Challan.countDocuments({ emailSentAt: { $ne: null } });
 
     // Violations sent today (emails sent today)
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
+    const { start: startOfToday, end: endOfToday } = getIndiaTodayRange();
     const violationsSentToday = await Challan.countDocuments({
       emailSentAt: { $gte: startOfToday, $lte: endOfToday }
     });
@@ -429,10 +427,7 @@ router.post('/reports', async (req, res) => {
       return res.status(400).json({ success: false, message: 'startDate and endDate are required.' });
     }
 
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+    const { start, end } = getIndiaDateRange(startDate, endDate);
 
     const challans = await Challan.find({ dateTime: { $gte: start, $lte: end } }).sort({ dateTime: -1 }).lean();
 

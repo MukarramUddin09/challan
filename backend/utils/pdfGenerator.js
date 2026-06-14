@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
+const { formatDate, formatDateTime } = require('./dateTime');
 
 const PAGE_WIDTH = 841.89;
 const PAGE_HEIGHT = 595.28;
@@ -92,10 +93,9 @@ const drawChallanCopy = (doc, challan, photoBuffer, x, y, width, height) => {
   doc.lineWidth(1.2).moveTo(x, cursorY).lineTo(x + width, cursorY).stroke('#000000');
   cursorY += 4;
 
-  const docType = challan.type || 'Challan';
   drawText(
     doc,
-    docType === 'Fine' ? 'FINE NOTICE' : 'CHALLAN NOTICE',
+    challan.type === 'Fine' ? 'NOTICE' : 'CHALLAN',
     innerX,
     cursorY,
     innerWidth,
@@ -103,18 +103,12 @@ const drawChallanCopy = (doc, challan, photoBuffer, x, y, width, height) => {
   );
   cursorY += 15;
 
-  const date = new Date(challan.dateTime);
-  const dateText = Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-IN', {
-    day: '2-digit', month: '2-digit', year: 'numeric'
-  });
-  drawText(doc, `Notice No: ${textValue(challan.noticeNumber)}`, innerX, cursorY, innerWidth * 0.5, {
+  const dateText = formatDateTime(challan.dateTime);
+  drawText(doc, `Notice No: ${textValue(challan.noticeNumber)}`, innerX, cursorY, innerWidth * 0.48, {
     size: 7, bold: true
   });
-  drawText(doc, `Date: ${dateText}`, innerX + innerWidth * 0.5, cursorY, innerWidth * 0.27, {
-    size: 7, bold: true, align: 'center'
-  });
-  drawText(doc, `Type: ${docType}`, innerX + innerWidth * 0.77, cursorY, innerWidth * 0.23, {
-    size: 7, bold: true, align: 'right'
+  drawText(doc, `Date & Time: ${dateText}`, innerX + innerWidth * 0.48, cursorY, innerWidth * 0.52, {
+    size: 6.2, bold: true, align: 'right'
   });
   cursorY += 12;
 
@@ -178,7 +172,7 @@ const drawChallanCopy = (doc, challan, photoBuffer, x, y, width, height) => {
   );
   cursorY += 31;
 
-  const footerHeight = 67;
+  const footerHeight = challan.officerNote ? 86 : 67;
   const footerY = y + height - padding - footerHeight;
   const photoHeight = Math.max(42, footerY - cursorY - 15);
   if (photoBuffer) {
@@ -211,27 +205,59 @@ const drawChallanCopy = (doc, challan, photoBuffer, x, y, width, height) => {
     innerWidth,
     { size: 7 }
   );
-  const created = new Date(challan.createdAt);
-  const issuedAt = Number.isNaN(created.getTime()) ? '' : created.toLocaleString('en-IN');
+  const issuedAt = formatDateTime(challan.createdAt || challan.dateTime);
   drawText(doc, `Issued at: ${issuedAt}`, innerX, footerY + 22, innerWidth, {
     size: 5.8, color: '#666666'
   });
-  drawText(doc, `To: ${textValue(challan.violatorName)}`, innerX, footerY + 36, innerWidth * 0.55, {
+  let detailsY = footerY + 36;
+  if (challan.officerNote) {
+    drawText(doc, 'Officer Note:', innerX, detailsY, 62, { size: 6.5, bold: true });
+    drawText(doc, challan.officerNote, innerX + 62, detailsY, innerWidth - 62, {
+      size: 6.5, height: 16
+    });
+    detailsY += 19;
+  }
+  drawText(doc, `To: ${textValue(challan.violatorName)}`, innerX, detailsY, innerWidth * 0.55, {
     size: 7, bold: true
   });
-  drawText(doc, `Phone: ${textValue(challan.violatorPhone)}`, innerX, footerY + 47, innerWidth * 0.55, {
+  drawText(doc, `Phone: ${textValue(challan.violatorPhone)}`, innerX, detailsY + 11, innerWidth * 0.55, {
     size: 7, bold: true
   });
-  drawText(doc, 'for Commissioner GHMC', innerX + innerWidth * 0.58, footerY + 34, innerWidth * 0.42, {
+  drawText(doc, 'for Commissioner GHMC', innerX + innerWidth * 0.58, detailsY - 2, innerWidth * 0.42, {
     size: 7, align: 'right'
   });
   doc
     .lineWidth(0.6)
-    .moveTo(innerX + innerWidth - 105, footerY + 52)
-    .lineTo(innerX + innerWidth, footerY + 52)
+    .moveTo(innerX + innerWidth - 105, detailsY + 16)
+    .lineTo(innerX + innerWidth, detailsY + 16)
     .stroke('#333333');
-  drawText(doc, 'Authorized Signatory', innerX + innerWidth - 105, footerY + 55, 105, {
+  drawText(doc, 'Authorized Signatory', innerX + innerWidth - 105, detailsY + 19, 105, {
     size: 5.8, align: 'right'
+  });
+};
+
+const drawChallanPage = (doc, challan, photoBase64) => {
+  const usableWidth = PAGE_WIDTH - (PAGE_MARGIN * 2);
+  const usableHeight = PAGE_HEIGHT - (PAGE_MARGIN * 2);
+  const dividerWidth = 25;
+  const copyWidth = (usableWidth - dividerWidth) / 2;
+  const leftX = PAGE_MARGIN;
+  const rightX = leftX + copyWidth + dividerWidth;
+  const photoBuffer = dataUriToBuffer(photoBase64);
+
+  drawChallanCopy(doc, challan, photoBuffer, leftX, PAGE_MARGIN, copyWidth, usableHeight);
+  drawChallanCopy(doc, challan, photoBuffer, rightX, PAGE_MARGIN, copyWidth, usableHeight);
+
+  const dividerX = leftX + copyWidth + (dividerWidth / 2);
+  doc
+    .lineWidth(0.8)
+    .dash(4, { space: 3 })
+    .moveTo(dividerX, PAGE_MARGIN + 12)
+    .lineTo(dividerX, PAGE_HEIGHT - PAGE_MARGIN - 12)
+    .stroke('#999999')
+    .undash();
+  drawText(doc, 'OFFICE COPY', dividerX - 28, PAGE_HEIGHT / 2 - 4, 56, {
+    size: 5.5, color: '#666666', align: 'center'
   });
 };
 
@@ -244,27 +270,22 @@ const generateChallanPdf = (challan, photoBase64 = null) => {
   });
 
   return createPdfBuffer(doc, () => {
-    const usableWidth = PAGE_WIDTH - (PAGE_MARGIN * 2);
-    const usableHeight = PAGE_HEIGHT - (PAGE_MARGIN * 2);
-    const dividerWidth = 25;
-    const copyWidth = (usableWidth - dividerWidth) / 2;
-    const leftX = PAGE_MARGIN;
-    const rightX = leftX + copyWidth + dividerWidth;
-    const photoBuffer = dataUriToBuffer(photoBase64);
+    drawChallanPage(doc, challan, photoBase64);
+  });
+};
 
-    drawChallanCopy(doc, challan, photoBuffer, leftX, PAGE_MARGIN, copyWidth, usableHeight);
-    drawChallanCopy(doc, challan, photoBuffer, rightX, PAGE_MARGIN, copyWidth, usableHeight);
+const generateChallansPdf = (entries) => {
+  const doc = new PDFDocument({
+    size: 'A4',
+    layout: 'landscape',
+    margin: 0,
+    compress: true
+  });
 
-    const dividerX = leftX + copyWidth + (dividerWidth / 2);
-    doc
-      .lineWidth(0.8)
-      .dash(4, { space: 3 })
-      .moveTo(dividerX, PAGE_MARGIN + 12)
-      .lineTo(dividerX, PAGE_HEIGHT - PAGE_MARGIN - 12)
-      .stroke('#999999')
-      .undash();
-    drawText(doc, 'OFFICE COPY', dividerX - 28, PAGE_HEIGHT / 2 - 4, 56, {
-      size: 5.5, color: '#666666', align: 'center'
+  return createPdfBuffer(doc, () => {
+    entries.forEach((entry, index) => {
+      if (index > 0) doc.addPage();
+      drawChallanPage(doc, entry.challan, entry.photoBase64);
     });
   });
 };
@@ -285,10 +306,9 @@ const generateReportPdf = (challans, startDate, endDate) => {
       { label: 'Division', width: 68 },
       { label: 'Ward', width: 42 },
       { label: 'Location', width: 120 },
-      { label: 'Violator', width: 85 },
+      { label: 'Violator / Phone / Date-Time', width: 145 },
       { label: 'Violations', width: 150 },
-      { label: 'Fine', width: 65 },
-      { label: 'Date/Time', width: 110 }
+      { label: 'Fine', width: 65 }
     ];
     const tableX = 28;
     const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
@@ -304,7 +324,7 @@ const generateReportPdf = (challans, startDate, endDate) => {
       });
       drawText(
         doc,
-        `Report period: ${new Date(startDate).toLocaleDateString('en-IN')} - ${new Date(endDate).toLocaleDateString('en-IN')}`,
+        `Report period: ${formatDate(startDate)} - ${formatDate(endDate)}`,
         28,
         94,
         tableWidth,
@@ -329,10 +349,9 @@ const generateReportPdf = (challans, startDate, endDate) => {
         challan.division,
         challan.wardNumber,
         challan.location,
-        challan.violatorName,
+        `${challan.violatorName || ''}\n${challan.violatorPhone || ''}\n${formatDateTime(challan.dateTime)}`,
         Array.isArray(challan.violationType) ? challan.violationType.join(', ') : challan.violationType,
-        `Rs. ${Number(challan.fineAmount || 0).toLocaleString('en-IN')}`,
-        new Date(challan.dateTime).toLocaleString('en-IN')
+        `Rs. ${Number(challan.fineAmount || 0).toLocaleString('en-IN')}`
       ];
       const rowHeight = 30;
       if (y + rowHeight > pageBottom) {
@@ -362,4 +381,4 @@ const generateReportPdf = (challans, startDate, endDate) => {
   });
 };
 
-module.exports = { generateChallanPdf, generateReportPdf };
+module.exports = { generateChallanPdf, generateChallansPdf, generateReportPdf };

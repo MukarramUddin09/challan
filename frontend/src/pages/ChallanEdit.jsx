@@ -3,13 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import api, { resolveApiAssetUrl } from '../lib/api';
-
-const toDateInput = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
-};
+import { indiaDateTimeLocalToIso, toDateTimeLocalInput } from '../lib/constants';
 
 const ChallanEdit = () => {
   const { id } = useParams();
@@ -36,7 +30,8 @@ const ChallanEdit = () => {
     officerDesignation: '',
     dateTime: '',
     type: 'Challan',
-    legalText: ''
+    legalText: '',
+    officerNote: ''
   });
 
   useEffect(() => {
@@ -67,9 +62,10 @@ const ChallanEdit = () => {
           fineAmount: String(challan.fineAmount ?? ''),
           officerName: challan.officerName || '',
           officerDesignation: challan.officerDesignation || '',
-          dateTime: toDateInput(challan.dateTime),
+          dateTime: toDateTimeLocalInput(challan.dateTime),
           type: challan.type || 'Challan',
-          legalText: challan.legalText || ''
+          legalText: challan.legalText || '',
+          officerNote: challan.officerNote || ''
         });
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to load challan');
@@ -147,7 +143,7 @@ const ChallanEdit = () => {
     try {
       const data = new FormData();
       Object.entries(formData).forEach(([key, value]) => {
-        data.append(key, key === 'dateTime' ? new Date(value).toISOString() : value);
+        data.append(key, key === 'dateTime' ? indiaDateTimeLocalToIso(value) : value);
       });
       data.append('violationType', JSON.stringify(selectedViolations));
       data.append('removePhoto', String(removePhoto));
@@ -207,7 +203,7 @@ const ChallanEdit = () => {
           </div>
           <div>
             <label className="label">Date *</label>
-            <input type="date" name="dateTime" value={formData.dateTime} onChange={handleChange} className="input" required />
+            <input type="datetime-local" step="1" name="dateTime" value={formData.dateTime} onChange={handleChange} className="input" required />
           </div>
         </div>
 
@@ -287,6 +283,18 @@ const ChallanEdit = () => {
           )}
           <input type="file" accept="image/jpeg,image/png" onChange={handlePhotoChange} className="input" />
           <p className="text-xs text-gray-500 mt-2">Choose a JPEG or PNG to replace the current image. Maximum 5 MB.</p>
+        </div>
+
+        <div>
+          <label className="label">Officer Note</label>
+          <textarea
+            name="officerNote"
+            value={formData.officerNote}
+            onChange={handleChange}
+            className="input min-h-24 resize-y"
+            maxLength="500"
+            placeholder="Add a short note for this challan"
+          />
         </div>
 
         <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">

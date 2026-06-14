@@ -1,5 +1,6 @@
 const fs = require('fs');
 const https = require('https');
+const { formatDate, formatTime, formatDateTime } = require('./dateTime');
 
 const postBrevoEmail = (payload) => new Promise((resolve, reject) => {
   const body = JSON.stringify(payload);
@@ -106,16 +107,16 @@ const buildChallanEmailHTML = (challan) => {
       </div>
       
       <div style="padding: 24px;">
-        <h2 style="text-align: center; color: #1a3a5c; margin-bottom: 20px; font-size: 22px; border-bottom: 2px solid #1a3a5c; padding-bottom: 10px;">CHALLAN NOTICE</h2>
+        <h2 style="text-align: center; color: #1a3a5c; margin-bottom: 20px; font-size: 22px; border-bottom: 2px solid #1a3a5c; padding-bottom: 10px;">${challan.type === 'Fine' ? 'NOTICE' : 'CHALLAN'}</h2>
         
         <table style="width: 100%; margin-bottom: 16px; font-size: 14px;">
           <tr>
             <td style="padding: 4px 0;"><strong>Notice No:</strong> ${challan.noticeNumber}</td>
-            <td style="padding: 4px 0; text-align: right;"><strong>Date:</strong> ${new Date(challan.dateTime).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+            <td style="padding: 4px 0; text-align: right;"><strong>Date:</strong> ${formatDate(challan.dateTime)}</td>
           </tr>
           <tr>
             <td style="padding: 4px 0;"><strong>Division:</strong> ${challan.division}</td>
-            <td style="padding: 4px 0; text-align: right;"><strong>Time:</strong> ${new Date(challan.dateTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+            <td style="padding: 4px 0; text-align: right;"><strong>Time:</strong> ${formatTime(challan.dateTime)}</td>
           </tr>
           ${challan.divisionCode ? `<tr>
             <td style="padding: 4px 0;"><strong>Circle:</strong> ${challan.divisionCode}</td>
@@ -157,6 +158,7 @@ const buildChallanEmailHTML = (challan) => {
         <div style="margin-top: 24px; font-size: 13px;">
           <p><strong>Enforcement Officer:</strong> ${challan.officerName}</p>
           <p><strong>Designation:</strong> ${challan.officerDesignation}</p>
+          ${challan.officerNote ? `<p><strong>Officer Note:</strong> ${challan.officerNote}</p>` : ''}
         </div>
 
         <div style="margin-top: 24px; text-align: right; font-size: 13px;">
@@ -166,7 +168,7 @@ const buildChallanEmailHTML = (challan) => {
 
       <div style="background: #f1f1f1; padding: 12px; text-align: center; font-size: 11px; color: #666;">
         This is an official communication from GHMC Enforcement Division. 
-        Generated on ${new Date().toLocaleString('en-IN')}.
+        Generated on ${formatDateTime(new Date())}.
       </div>
     </div>
   `;

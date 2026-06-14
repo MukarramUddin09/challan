@@ -38,6 +38,7 @@ export const formatCurrency = (amount) => {
 
 export const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
     day: '2-digit',
     month: 'short',
     year: 'numeric'
@@ -46,11 +47,33 @@ export const formatDate = (dateString) => {
 
 export const formatDateTime = (dateString) => {
   return new Date(dateString).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: true
   });
 };
+
+export const toDateTimeLocalInput = (value = new Date()) => {
+  const date = new Date(value);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+  const get = type => parts.find(part => part.type === type)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
+};
+
+export const indiaDateTimeLocalToIso = value => (
+  value ? new Date(`${value}+05:30`).toISOString() : ''
+);

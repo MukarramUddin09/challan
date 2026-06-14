@@ -7,6 +7,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { formatDate, formatTime, formatDateTime } = require('./dateTime');
 
 const assetDirectory = path.join(__dirname, '..', '..', 'frontend', 'src', 'assets');
 
@@ -25,17 +26,13 @@ const embedImage = (filename, mimeType) => {
 const embeddedHeadingData = embedImage('GHMC Heading.jpeg', 'image/jpeg');
 
 const generatePdfHtml = (challan, photoBase64) => {
-  const dateStr = new Date(challan.dateTime).toLocaleDateString('en-IN', {
-    day: '2-digit', month: '2-digit', year: 'numeric'
-  });
-  const timeStr = new Date(challan.dateTime).toLocaleTimeString('en-IN', {
-    hour: '2-digit', minute: '2-digit', hour12: true
-  });
-  const issuedAt = new Date(challan.createdAt).toLocaleString('en-IN');
+  const dateStr = formatDate(challan.dateTime);
+  const timeStr = formatTime(challan.dateTime);
+  const issuedAt = formatDateTime(challan.createdAt || challan.dateTime);
 
   // Determine document type label
   const docType = challan.type || 'Challan';
-  const titleText = docType === 'Fine' ? 'FINE NOTICE' : 'CHALLAN NOTICE';
+  const titleText = docType === 'Fine' ? 'NOTICE' : 'CHALLAN';
 
   const violationRows = challan.violationType.map((v, i) => `
     <tr>
@@ -72,7 +69,6 @@ const generatePdfHtml = (challan, photoBase64) => {
       <div style="display:flex; justify-content:space-between; margin-bottom:3px; flex-wrap:wrap; gap:2px;">
         <span style="font-size:10px;"><strong>Notice No:</strong> ${challan.noticeNumber}</span>
         <span style="font-size:10px;"><strong>Date:</strong> ${dateStr}</span>
-        <span style="font-size:10px;"><strong>Type:</strong> ${docType}</span>
       </div>
 
       <!-- Division -->
@@ -118,6 +114,7 @@ const generatePdfHtml = (challan, photoBase64) => {
         <p style="font-size:10px; margin:4px 0;"><strong>Name &amp; Designation of Enforcement Officer:</strong></p>
         <p style="font-size:10px; margin:2px 0;">${challan.officerName} — ${challan.officerDesignation}</p>
         <p style="font-size:8px; color:#666; margin:4px 0;">Issued at: ${issuedAt}</p>
+        ${challan.officerNote ? `<p style="font-size:8px; margin:4px 0;"><strong>Officer Note:</strong> ${challan.officerNote}</p>` : ''}
 
         <div style="display:flex; justify-content:space-between; margin-top:6px;">
           <div>

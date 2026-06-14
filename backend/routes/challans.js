@@ -6,7 +6,8 @@ const Division = require('../models/Division');
 const Challan = require('../models/Challan');
 const { authenticate, authorize } = require('../middleware/auth');
 const { sendChallanEmail, buildChallanEmailHTML } = require('../utils/email');
-const { generateChallanPdf } = require('../utils/pdfGenerator');
+const { generateChallanPdf, generateChallansPdf } = require('../utils/pdfGenerator');
+const { formatDate, getIndiaDateRange } = require('../utils/dateTime');
 
 const router = express.Router();
 
@@ -81,6 +82,27 @@ const canAccessChallan = (user, challan) => (
   user.role === 'admin' || challan.division === user.division
 );
 
+const normalizePhone = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+const phoneSearchPattern = (value) => normalizePhone(value)
+  .split('')
+  .map(escapeRegExp)
+  .join('\\D*');
+
+const readPhotoAsDataUri = (challan) => {
+  const filename = findPhotoForChallan(challan);
+  if (!filename) return null;
+
+  const photoPath = path.join(uploadsDir, filename);
+  if (!fs.existsSync(photoPath)) return null;
+
+  const ext = path.extname(filename).toLowerCase();
+  const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+  return `data:${mime};base64,${fs.readFileSync(photoPath).toString('base64')}`;
+};
+
 /**
  * Generate unique notice number: GHMC/{division}/{sequence}
  */
@@ -116,20 +138,25 @@ router.get('/', authenticate, async (req, res) => {
       filter.division = division;
     }
 
-    // Search by violator name or notice number
+    // Search by violator name, phone, notice number, or location
     if (search) {
+      const phonePattern = phoneSearchPattern(search);
       filter.$or = [
-        { violatorName: { $regex: search, $options: 'i' } },
-        { noticeNumber: { $regex: search, $options: 'i' } },
-        { location: { $regex: search, $options: 'i' } }
+        { violatorName: { $regex: escapeRegExp(search), $options: 'i' } },
+        ...(phonePattern.length >= 7
+          ? [{ violatorPhone: { $regex: phonePattern, $options: 'i' } }]
+          : []),
+        { noticeNumber: { $regex: escapeRegExp(search), $options: 'i' } },
+        { location: { $regex: escapeRegExp(search), $options: 'i' } }
       ];
     }
 
     // Date range filter
     if (startDate || endDate) {
       filter.dateTime = {};
-      if (startDate) filter.dateTime.$gte = new Date(startDate);
-      if (endDate) filter.dateTime.$lte = new Date(endDate + 'T23:59:59.999Z');
+      const range = getIndiaDateRange(startDate || endDate, endDate || startDate);
+      if (startDate) filter.dateTime.$gte = range.start;
+      if (endDate) filter.dateTime.$lte = range.end;
     }
 
     // Violation type filter
@@ -187,7 +214,8 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       officerName,
       officerDesignation,
       dateTime,
-      type
+      type,
+      officerNote
     } = req.body;
 
     // Parse violationType (sent as JSON string from FormData)
@@ -246,6 +274,7 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       officerDesignation,
       dateTime: dateTime ? new Date(dateTime) : new Date(),
       type: type || 'Challan',
+      officerNote: officerNote || '',
       createdBy: req.user._id
     };
 
@@ -371,6 +400,7 @@ router.put('/:id', authenticate, authorize('worker', 'admin'), upload.single('ph
       dateTime: req.body.dateTime ? new Date(req.body.dateTime) : challan.dateTime,
       type: req.body.type || challan.type,
       legalText: req.body.legalText,
+      officerNote: req.body.officerNote || '',
       photoFilename: nextPhotoFilename
     });
 
@@ -478,7 +508,7 @@ router.post('/:id/send-email', authenticate, async (req, res) => {
     }
 
     // Build email content
-    const subject = `GHMC Challan Notice - ${challan.violatorName} - ${new Date(challan.dateTime).toLocaleDateString('en-IN')}`;
+    const subject = `GHMC ${challan.type === 'Fine' ? 'Notice' : 'Challan'} - ${challan.violatorName} - ${formatDate(challan.dateTime)}`;
     const html = buildChallanEmailHTML(challan);
 
     // Prepare the photo attached to this exact challan.
@@ -522,6 +552,44 @@ router.post('/:id/send-email', authenticate, async (req, res) => {
 });
 
 /**
+ * POST /api/challans/print-by-phone
+ * Generate one PDF containing all challans for an exact violator phone number.
+ */
+router.post('/print-by-phone', authenticate, async (req, res) => {
+  try {
+    const phone = normalizePhone(req.body.violatorPhone);
+    if (!phone) {
+      return res.status(400).json({ success: false, message: 'Violator phone number is required.' });
+    }
+
+    const accessFilter = req.user.role === 'worker' ? { division: req.user.division } : {};
+    const candidates = await Challan.find(accessFilter).sort({ dateTime: -1 });
+    const challans = candidates.filter(item => normalizePhone(item.violatorPhone) === phone);
+
+    if (challans.length <= 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'More than 3 challans are required for combined printing.'
+      });
+    }
+
+    const entries = challans.map(challan => ({
+      challan,
+      photoBase64: readPhotoAsDataUri(challan)
+    }));
+    const pdfBuffer = await generateChallansPdf(entries);
+
+    res.type('application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="GHMC-Challans-${phone}.pdf"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(Buffer.from(pdfBuffer));
+  } catch (err) {
+    console.error('Bulk challan PDF error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to generate combined challan PDF.' });
+  }
+});
+
+/**
  * POST /api/challans/:id/generate-pdf
  * Generate and return PDF buffer
  */
@@ -539,20 +607,7 @@ router.post('/:id/generate-pdf', authenticate, async (req, res) => {
     }
 
     // Read photo as base64 if a matching file exists on disk
-    let photoBase64 = null;
-    const foundPhotoForPdf = findPhotoForChallan(challan);
-    if (foundPhotoForPdf) {
-      const photoPath = path.join(uploadsDir, foundPhotoForPdf);
-      if (fs.existsSync(photoPath)) {
-        const photoBuffer = fs.readFileSync(photoPath);
-        const ext = path.extname(foundPhotoForPdf).toLowerCase();
-        let mime = 'image/png';
-        if (ext === '.jpg' || ext === '.jpeg') mime = 'image/jpeg';
-        else if (ext === '.webp') mime = 'image/webp';
-        else if (ext === '.png') mime = 'image/png';
-        photoBase64 = `data:${mime};base64,${photoBuffer.toString('base64')}`;
-      }
-    }
+    const photoBase64 = readPhotoAsDataUri(challan);
 
     const filename = `GHMC-${challan.type || 'Challan'}-${challan.noticeNumber.replace(/\//g, '-')}.pdf`;
 
