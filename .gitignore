@@ -12,3 +12,4 @@ backend/.env
 .env
 backend/.env
 .env
+*.mp4 
