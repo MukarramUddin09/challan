@@ -14,6 +14,7 @@ const ChallanList = () => {
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
   const [printing, setPrinting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     fetchChallans();
@@ -44,6 +45,27 @@ const ChallanList = () => {
       const digits = c.violatorPhone?.replace(/\D/g, '') || '';
       return (digits.length > 10 ? digits.slice(-10) : digits) === normalizedSearch;
     });
+  const allPhoneChallansReadyToPrint = isExactPhoneResult
+    && total === challans.length
+    && challans.every(c => Boolean(c.emailSentAt));
+
+  const handleDelete = async (challan) => {
+    const confirmed = window.confirm(
+      `Delete challan ${challan.noticeNumber}? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(challan._id);
+      await api.delete(`/challans/${challan._id}`);
+      toast.success('Challan deleted successfully');
+      await fetchChallans();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete challan');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handlePrintByPhone = async () => {
     const printWindow = window.open('', '_blank');
@@ -100,11 +122,15 @@ const ChallanList = () => {
         {isExactPhoneResult && total > 3 && (
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <p className="text-sm text-gray-600">
-              Found {total} challans for phone {search}.
+              {allPhoneChallansReadyToPrint
+                ? `Found ${total} challans for phone ${search}.`
+                : 'Send email and download every challan after its latest edit before printing them together.'}
             </p>
-            <button onClick={handlePrintByPhone} disabled={printing} className="btn-primary py-2">
-              {printing ? 'Preparing...' : `Print All ${total} Challans`}
-            </button>
+            {allPhoneChallansReadyToPrint && (
+              <button onClick={handlePrintByPhone} disabled={printing} className="btn-primary py-2">
+                {printing ? 'Preparing...' : `Print All ${total} Challans`}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -147,6 +173,16 @@ const ChallanList = () => {
                     <div className="flex items-center gap-4">
                       <Link to={`/challans/${c._id}`} className="text-navy-700 hover:text-navy-900 font-semibold">View</Link>
                       <Link to={`/challans/${c._id}/edit`} className="text-amber-700 hover:text-amber-900 font-semibold">Edit</Link>
+                      {user?.role === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(c)}
+                          disabled={deletingId === c._id}
+                          className="text-red-700 hover:text-red-900 font-semibold disabled:opacity-50"
+                        >
+                          {deletingId === c._id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

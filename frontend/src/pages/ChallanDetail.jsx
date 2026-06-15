@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api, { resolveApiAssetUrl } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import { formatDateTime } from '../lib/constants';
 
 const ChallanDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [challan, setChallan] = useState(null);
   const [recipients, setRecipients] = useState([]);
   const [selectedEmails, setSelectedEmails] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -104,6 +107,23 @@ const ChallanDetail = () => {
     }
   };
 
+  const handleDelete = async () => {
+    const confirmed = window.confirm(
+      `Delete challan ${challan.noticeNumber}? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeleting(true);
+      await api.delete(`/challans/${id}`);
+      toast.success('Challan deleted successfully');
+      navigate('/challans', { replace: true });
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete challan');
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-12"><div className="spinner spinner-lg text-navy-600" /></div>;
   }
@@ -118,7 +138,14 @@ const ChallanDetail = () => {
         <button onClick={() => navigate('/challans')} className="text-navy-700 hover:text-navy-900">
           &larr; Back to Challans
         </button>
-        <Link to={`/challans/${id}/edit`} className="btn-primary btn-sm">Edit Challan</Link>
+        <div className="flex items-center gap-3">
+          <Link to={`/challans/${id}/edit`} className="btn-primary btn-sm">Edit Challan</Link>
+          {isAdmin && (
+            <button type="button" onClick={handleDelete} disabled={deleting} className="btn-danger btn-sm">
+              {deleting ? 'Deleting...' : 'Delete Challan'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card p-5 sm:p-8 mb-6">

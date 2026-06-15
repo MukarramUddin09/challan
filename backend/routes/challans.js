@@ -401,7 +401,9 @@ router.put('/:id', authenticate, authorize('worker', 'admin'), upload.single('ph
       type: req.body.type || challan.type,
       legalText: req.body.legalText,
       officerNote: req.body.officerNote || '',
-      photoFilename: nextPhotoFilename
+      photoFilename: nextPhotoFilename,
+      sentToEmails: [],
+      emailSentAt: null
     });
 
     await challan.save();
@@ -442,6 +444,44 @@ router.put('/:id', authenticate, authorize('worker', 'admin'), upload.single('ph
     }
     console.error('Update challan error:', err);
     res.status(500).json({ success: false, message: 'Server error updating challan.' });
+  }
+});
+
+/**
+ * DELETE /api/challans/:id
+ * Delete a challan. Admin only.
+ */
+router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const challan = await Challan.findById(req.params.id);
+    if (!challan) {
+      return res.status(404).json({ success: false, message: 'Challan not found.' });
+    }
+
+    const photoFilename = findPhotoForChallan(challan);
+    await Challan.findByIdAndDelete(challan._id);
+
+    if (photoFilename) {
+      const photoPath = path.join(uploadsDir, path.basename(photoFilename));
+      if (fs.existsSync(photoPath)) {
+        try {
+          fs.unlinkSync(photoPath);
+        } catch (cleanupError) {
+          console.warn('Unable to remove deleted challan photo:', cleanupError.message);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Challan deleted successfully.'
+    });
+  } catch (err) {
+    if (err.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid challan ID.' });
+    }
+    console.error('Delete challan error:', err);
+    return res.status(500).json({ success: false, message: 'Server error deleting challan.' });
   }
 });
 
@@ -570,6 +610,13 @@ router.post('/print-by-phone', authenticate, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'More than 3 challans are required for combined printing.'
+      });
+    }
+
+    if (challans.some(challan => !challan.emailSentAt)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Send and download every challan after its latest edit before combined printing.'
       });
     }
 
