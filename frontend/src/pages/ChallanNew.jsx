@@ -135,7 +135,7 @@ const ChallanNew = () => {
     }
 
     const fineAmount = Number(formData.fineAmount);
-    if (!Number.isFinite(fineAmount) || fineAmount < 0) {
+    if (formData.type === 'Challan' && (!Number.isFinite(fineAmount) || fineAmount < 0)) {
       toast.error('Enter a valid fine amount');
       return;
     }
@@ -191,8 +191,8 @@ const ChallanNew = () => {
           <div>
             <label className="label">Type *</label>
             <select name="type" value={formData.type} onChange={handleChange} className="input">
+              <option value="Notice">Notice</option>
               <option value="Challan">Challan</option>
-              <option value="Fine">Fine</option>
             </select>
           </div>
           <div>
@@ -273,7 +273,7 @@ const ChallanNew = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
+          {formData.type === 'Challan' && <div>
             <label className="label">Fine Amount (₹) *</label>
             <input
               type="number"
@@ -287,7 +287,7 @@ const ChallanNew = () => {
               inputMode="decimal"
               required
             />
-          </div>
+          </div>}
           <div>
             <label className="label">Officer Name *</label>
             <input type="text" name="officerName" value={formData.officerName} onChange={handleChange} className="input" required />
@@ -296,7 +296,7 @@ const ChallanNew = () => {
 
         <div>
           <label className="label">Officer Designation *</label>
-          <input type="text" name="officerDesignation" value={formData.officerDesignation} onChange={handleChange} className="input" placeholder="e.g., Traffic Inspector" required />
+          <input type="text" name="officerDesignation" value={formData.officerDesignation} onChange={handleChange} className="input" placeholder="e.g., SFA/ Jawan/ SS" required />
         </div>
 
         <div>

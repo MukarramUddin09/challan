@@ -165,7 +165,9 @@ const ChallanList = () => {
                   <td className="px-6 py-4 text-sm text-gray-900">{c.violatorName}</td>
                   <td className="px-6 py-4 text-sm text-gray-700">{c.violatorPhone || '-'}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{c.location}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-green-600">₹{c.fineAmount}</td>
+                  <td className="px-6 py-4 text-sm font-semibold text-green-600">
+                    {c.type === 'Challan' ? `₹${c.fineAmount}` : '-'}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {formatDateTime(c.dateTime)}
                   </td>

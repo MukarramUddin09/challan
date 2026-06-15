@@ -86,6 +86,7 @@ const normalizePhone = (value) => {
   const digits = String(value || '').replace(/\D/g, '');
   return digits.length > 10 ? digits.slice(-10) : digits;
 };
+const normalizeDocumentType = (value) => value === 'Challan' ? 'Challan' : 'Notice';
 const phoneSearchPattern = (value) => normalizePhone(value)
   .split('')
   .map(escapeRegExp)
@@ -107,9 +108,52 @@ const readPhotoAsDataUri = (challan) => {
  * Generate unique notice number: GHMC/{division}/{sequence}
  */
 async function generateNoticeNumber(division) {
-  const count = await Challan.countDocuments({ division });
-  const sequence = String(count + 1).padStart(5, '0');
-  return `GHMC/${division}/${sequence}`;
+  const prefix = `GHMC/${division}/`;
+  const [lastChallan] = await Challan.aggregate([
+    {
+      $match: {
+        noticeNumber: { $regex: `^${escapeRegExp(prefix)}\\d+$` }
+      }
+    },
+    {
+      $project: {
+        sequence: {
+          $convert: {
+            input: { $arrayElemAt: [{ $split: ['$noticeNumber', '/'] }, -1] },
+            to: 'long',
+            onError: 0,
+            onNull: 0
+          }
+        }
+      }
+    },
+    { $sort: { sequence: -1 } },
+    { $limit: 1 }
+  ]);
+
+  const nextNumber = Number(lastChallan?.sequence || 0) + 1;
+  return `${prefix}${String(nextNumber).padStart(5, '0')}`;
+}
+
+async function createChallanWithUniqueNoticeNumber(challanData) {
+  const maxAttempts = 20;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const noticeNumber = await generateNoticeNumber(challanData.division);
+
+    try {
+      return await Challan.create({ ...challanData, noticeNumber });
+    } catch (error) {
+      const isNoticeNumberCollision = error?.code === 11000
+        && (error?.keyPattern?.noticeNumber || error?.keyValue?.noticeNumber);
+
+      if (!isNoticeNumberCollision || attempt === maxAttempts) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Unable to allocate a unique challan number.');
 }
 
 /**
@@ -242,7 +286,8 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       });
     }
 
-    const parsedFineAmount = parseFineAmount(fineAmount);
+    const documentType = normalizeDocumentType(type);
+    const parsedFineAmount = documentType === 'Challan' ? parseFineAmount(fineAmount) : 0;
     if (parsedFineAmount === null) {
       return res.status(400).json({
         success: false,
@@ -250,17 +295,14 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       });
     }
 
-    // Generate notice number
     const useDivision = req.user.role === 'worker'
       ? req.user.division
       : division || req.user.division;
-    const noticeNumber = await generateNoticeNumber(useDivision);
 
     const divisionDoc = await Division.findOne({ name: useDivision });
     const divisionCode = divisionDoc?.code || '';
 
     const challanData = {
-      noticeNumber,
       division: useDivision,
       divisionCode,
       wardNumber,
@@ -273,13 +315,12 @@ router.post('/', authenticate, authorize('worker', 'admin'), upload.single('phot
       officerName,
       officerDesignation,
       dateTime: dateTime ? new Date(dateTime) : new Date(),
-      type: type || 'Challan',
+      type: documentType,
       officerNote: officerNote || '',
       createdBy: req.user._id
     };
 
-    const challan = new Challan(challanData);
-    await challan.save();
+    const challan = await createChallanWithUniqueNoticeNumber(challanData);
 
     if (req.file) {
       const ext = req.file.mimetype === 'image/png' ? '.png' : '.jpg';
@@ -353,7 +394,10 @@ router.put('/:id', authenticate, authorize('worker', 'admin'), upload.single('ph
       });
     }
 
-    const parsedFineAmount = parseFineAmount(req.body.fineAmount);
+    const documentType = normalizeDocumentType(req.body.type || challan.type);
+    const parsedFineAmount = documentType === 'Challan'
+      ? parseFineAmount(req.body.fineAmount)
+      : 0;
     if (parsedFineAmount === null) {
       return res.status(400).json({
         success: false,
@@ -398,7 +442,7 @@ router.put('/:id', authenticate, authorize('worker', 'admin'), upload.single('ph
       officerName: req.body.officerName,
       officerDesignation: req.body.officerDesignation,
       dateTime: req.body.dateTime ? new Date(req.body.dateTime) : challan.dateTime,
-      type: req.body.type || challan.type,
+      type: documentType,
       legalText: req.body.legalText,
       officerNote: req.body.officerNote || '',
       photoFilename: nextPhotoFilename,
@@ -548,7 +592,7 @@ router.post('/:id/send-email', authenticate, async (req, res) => {
     }
 
     // Build email content
-    const subject = `GHMC ${challan.type === 'Fine' ? 'Notice' : 'Challan'} - ${challan.violatorName} - ${formatDate(challan.dateTime)}`;
+    const subject = `GHMC ${normalizeDocumentType(challan.type)} - ${challan.violatorName} - ${formatDate(challan.dateTime)}`;
     const html = buildChallanEmailHTML(challan);
 
     // Prepare the photo attached to this exact challan.
@@ -656,7 +700,7 @@ router.post('/:id/generate-pdf', authenticate, async (req, res) => {
     // Read photo as base64 if a matching file exists on disk
     const photoBase64 = readPhotoAsDataUri(challan);
 
-    const filename = `GHMC-${challan.type || 'Challan'}-${challan.noticeNumber.replace(/\//g, '-')}.pdf`;
+    const filename = `GHMC-${normalizeDocumentType(challan.type)}-${challan.noticeNumber.replace(/\//g, '-')}.pdf`;
 
     try {
       const pdfBuffer = await generateChallanPdf(challan, photoBase64);

@@ -76,8 +76,7 @@ const Dashboard = () => {
       )}
 
       {/* Report generation */}
-      {isAdmin && (
-        <div className="mt-8 card p-6">
+      <div className="mt-8 card p-6">
           <h2 className="text-xl font-bold text-navy-900 mb-4">Generate Violations Report</h2>
           <div className="flex gap-3 items-end">
             <div>
@@ -98,7 +97,7 @@ const Dashboard = () => {
                     return;
                   }
                   try {
-                    const res = await api.post('/admin/reports', { startDate: s, endDate: e }, { responseType: 'blob' });
+                    const res = await api.post('/reports', { startDate: s, endDate: e }, { responseType: 'blob' });
                     const url = window.URL.createObjectURL(res.data);
                     const link = document.createElement('a');
                     link.href = url;
@@ -117,8 +116,7 @@ const Dashboard = () => {
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

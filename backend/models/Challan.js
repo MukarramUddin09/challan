@@ -31,7 +31,7 @@ const challanSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['Challan', 'Fine'],
+    enum: ['Notice', 'Challan'],
     default: 'Challan'
   },
   location: {
@@ -107,6 +107,14 @@ const challanSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+});
+
+// Convert records created before Notice replaced the old document type.
+challanSchema.pre('validate', function normalizeLegacyDocumentType(next) {
+  if (this.type === 'Fine') {
+    this.type = 'Notice';
+  }
+  next();
 });
 
 // Index for efficient querying

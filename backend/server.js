@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
@@ -25,10 +26,12 @@ const EmailRecipient = require('./models/EmailRecipient');
 const Violation = require('./models/Violation');
 const Division = require('./models/Division');
 const { authenticate } = require('./middleware/auth');
-const { getIndiaTodayRange } = require('./utils/dateTime');
+const { getIndiaDateRange, getIndiaTodayRange } = require('./utils/dateTime');
+const { generateReportPdf } = require('./utils/pdfGenerator');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
 
 // ── Middleware ───────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
@@ -75,7 +78,7 @@ app.get('/api/stats/my-division', authenticate, async (req, res) => {
 
     const totalChallans = await Challan.countDocuments({ division });
     const totalFinesResult = await Challan.aggregate([
-      { $match: { division } },
+      { $match: { division, type: 'Challan' } },
       { $group: { _id: null, total: { $sum: '$fineAmount' } } }
     ]);
     const totalFines = totalFinesResult.length > 0 ? totalFinesResult[0].total : 0;
@@ -108,6 +111,39 @@ app.get('/api/stats/my-division', authenticate, async (req, res) => {
   } catch (err) {
     console.error('Worker stats error:', err);
     res.status(500).json({ success: false, message: 'Server error fetching stats.' });
+  }
+});
+
+// Report generation for admins and workers. Workers are limited to their division.
+app.post('/api/reports', authenticate, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'startDate and endDate are required.' });
+    }
+
+    const { start, end } = getIndiaDateRange(startDate, endDate);
+    const filter = { dateTime: { $gte: start, $lte: end } };
+    if (req.user.role === 'worker') {
+      filter.division = req.user.division;
+    }
+
+    const challans = await Challan.find(filter).sort({ dateTime: -1 }).lean();
+    const pdfBuffer = await generateReportPdf(challans, start, end);
+    const divisionSuffix = req.user.role === 'worker'
+      ? `-${String(req.user.division).replace(/[^a-z0-9-]+/gi, '-')}`
+      : '';
+
+    res.type('application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="GHMC-Violations-Report${divisionSuffix}-${startDate}-${endDate}.pdf"`
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(Buffer.from(pdfBuffer));
+  } catch (err) {
+    console.error('Report generation error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to generate report.' });
   }
 });
 
@@ -166,7 +202,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 404 handler
+if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+      return next();
+    }
+    return res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
+
+// API and development 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,

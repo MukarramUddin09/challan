@@ -95,7 +95,7 @@ const drawChallanCopy = (doc, challan, photoBuffer, x, y, width, height) => {
 
   drawText(
     doc,
-    challan.type === 'Fine' ? 'NOTICE' : 'CHALLAN',
+    challan.type === 'Challan' ? 'CHALLAN' : 'SHOWCAUSE NOTICE',
     innerX,
     cursorY,
     innerWidth,
@@ -160,17 +160,21 @@ const drawChallanCopy = (doc, challan, photoBuffer, x, y, width, height) => {
     cursorY += rowHeight;
   });
 
-  doc.fillColor('#f0f0f0').rect(innerX, cursorY + 4, innerWidth, 23).fill();
-  doc.lineWidth(1.2).rect(innerX, cursorY + 4, innerWidth, 23).stroke('#000000');
-  drawText(
-    doc,
-    `Fine Amount: Rs. ${Number(challan.fineAmount || 0).toLocaleString('en-IN')}`,
-    innerX,
-    cursorY + 10,
-    innerWidth,
-    { size: 9.5, bold: true, align: 'center' }
-  );
-  cursorY += 31;
+  if (challan.type === 'Challan') {
+    doc.fillColor('#f0f0f0').rect(innerX, cursorY + 4, innerWidth, 23).fill();
+    doc.lineWidth(1.2).rect(innerX, cursorY + 4, innerWidth, 23).stroke('#000000');
+    drawText(
+      doc,
+      `Fine Amount: Rs. ${Number(challan.fineAmount || 0).toLocaleString('en-IN')}`,
+      innerX,
+      cursorY + 10,
+      innerWidth,
+      { size: 9.5, bold: true, align: 'center' }
+    );
+    cursorY += 31;
+  } else {
+    cursorY += 8;
+  }
 
   const footerHeight = challan.officerNote ? 86 : 67;
   const footerY = y + height - padding - footerHeight;
@@ -351,7 +355,9 @@ const generateReportPdf = (challans, startDate, endDate) => {
         challan.location,
         `${challan.violatorName || ''}\n${challan.violatorPhone || ''}\n${formatDateTime(challan.dateTime)}`,
         Array.isArray(challan.violationType) ? challan.violationType.join(', ') : challan.violationType,
-        `Rs. ${Number(challan.fineAmount || 0).toLocaleString('en-IN')}`
+        challan.type === 'Challan'
+          ? `Rs. ${Number(challan.fineAmount || 0).toLocaleString('en-IN')}`
+          : ''
       ];
       const rowHeight = 30;
       if (y + rowHeight > pageBottom) {

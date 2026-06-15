@@ -23,7 +23,7 @@ function generateReportHtml(challans, startDate, endDate) {
       <td style="padding:8px;border:1px solid #ddd">${c.location || ''}</td>
       <td style="padding:8px;border:1px solid #ddd">${c.violatorName || ''}<br>${c.violatorPhone || ''}<br>${formatDateTime(c.dateTime)}</td>
       <td style="padding:8px;border:1px solid #ddd">${Array.isArray(c.violationType) ? c.violationType.join(', ') : c.violationType}</td>
-      <td style="padding:8px;border:1px solid #ddd">₹${(c.fineAmount || 0).toLocaleString('en-IN')}</td>
+      <td style="padding:8px;border:1px solid #ddd">${c.type === 'Challan' ? `₹${(c.fineAmount || 0).toLocaleString('en-IN')}` : ''}</td>
     </tr>
   `).join('');
 

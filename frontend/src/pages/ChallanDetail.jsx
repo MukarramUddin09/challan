@@ -43,7 +43,7 @@ const ChallanDetail = () => {
     const url = window.URL.createObjectURL(response.data);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `GHMC-${challan.type === 'Fine' ? 'Notice' : 'Challan'}-${challan.noticeNumber.replace(/\//g, '-')}.pdf`;
+    link.download = `GHMC-${challan.type === 'Challan' ? 'Challan' : 'Notice'}-${challan.noticeNumber.replace(/\//g, '-')}.pdf`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -63,7 +63,7 @@ const ChallanDetail = () => {
       const url = window.URL.createObjectURL(response.data);
       printWindow.document.write(`
         <html>
-          <head><title>Print ${challan.type === 'Fine' ? 'Notice' : 'Challan'}</title></head>
+          <head><title>Print ${challan.type === 'Challan' ? 'Challan' : 'Notice'}</title></head>
           <body style="margin:0">
             <iframe
               src="${url}"
@@ -160,10 +160,12 @@ const ChallanDetail = () => {
             <Detail label="Ward" value={`Ward ${challan.wardNumber}${challan.wardName ? ` - ${challan.wardName}` : ''}`} />
           )}
           <Detail label="Date & Time" value={formatDateTime(challan.dateTime)} />
-          <div>
-            <p className="text-sm text-gray-600">Fine Amount</p>
-            <p className="text-2xl font-bold text-green-600">INR {challan.fineAmount}</p>
-          </div>
+          {challan.type === 'Challan' && (
+            <div>
+              <p className="text-sm text-gray-600">Fine Amount</p>
+              <p className="text-2xl font-bold text-green-600">INR {challan.fineAmount}</p>
+            </div>
+          )}
         </div>
 
         <Section title="Violations">

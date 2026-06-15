@@ -63,7 +63,7 @@ const ChallanEdit = () => {
           officerName: challan.officerName || '',
           officerDesignation: challan.officerDesignation || '',
           dateTime: toDateTimeLocalInput(challan.dateTime),
-          type: challan.type || 'Challan',
+          type: challan.type === 'Challan' ? 'Challan' : 'Notice',
           legalText: challan.legalText || '',
           officerNote: challan.officerNote || ''
         });
@@ -187,8 +187,8 @@ const ChallanEdit = () => {
           <div>
             <label className="label">Type *</label>
             <select name="type" value={formData.type} onChange={handleChange} className="input">
+              <option value="Notice">Notice</option>
               <option value="Challan">Challan</option>
-              <option value="Fine">Fine</option>
             </select>
           </div>
           <div>
@@ -253,10 +253,10 @@ const ChallanEdit = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
+          {formData.type === 'Challan' && <div>
             <label className="label">Fine Amount (INR) *</label>
             <input type="number" name="fineAmount" value={formData.fineAmount} onChange={handleChange} className="input" min="0" step="0.01" required />
-          </div>
+          </div>}
           <div>
             <label className="label">Officer Name *</label>
             <input name="officerName" value={formData.officerName} onChange={handleChange} className="input" required />
@@ -265,7 +265,7 @@ const ChallanEdit = () => {
 
         <div>
           <label className="label">Officer Designation *</label>
-          <input name="officerDesignation" value={formData.officerDesignation} onChange={handleChange} className="input" required />
+          <input name="officerDesignation" value={formData.officerDesignation} onChange={handleChange} className="input" placeholder="e.g., SFA/ Jawan/ SS" required />
         </div>
 
         <div>

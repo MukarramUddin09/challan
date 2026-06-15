@@ -111,7 +111,9 @@ router.get('/stats', async (req, res) => {
         $group: {
           _id: '$division',
           count: { $sum: 1 },
-          totalFines: { $sum: '$fineAmount' }
+          totalFines: {
+            $sum: { $cond: [{ $eq: ['$type', 'Challan'] }, '$fineAmount', 0] }
+          }
         }
       },
       { $sort: { count: -1 } }
@@ -119,6 +121,7 @@ router.get('/stats', async (req, res) => {
 
     // Total fines
     const totalFinesResult = await Challan.aggregate([
+      { $match: { type: 'Challan' } },
       { $group: { _id: null, total: { $sum: '$fineAmount' } } }
     ]);
     const totalFines = totalFinesResult.length > 0 ? totalFinesResult[0].total : 0;
@@ -276,7 +279,7 @@ router.get('/division-stats/:division', async (req, res) => {
     const totalChallans = await Challan.countDocuments({ division });
 
     const totalFinesResult = await Challan.aggregate([
-      { $match: { division } },
+      { $match: { division, type: 'Challan' } },
       { $group: { _id: null, total: { $sum: '$fineAmount' } } }
     ]);
     const totalFines = totalFinesResult.length > 0 ? totalFinesResult[0].total : 0;

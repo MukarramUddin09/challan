@@ -92,6 +92,7 @@ const sendChallanEmail = async ({ to, subject, html, attachment }) => {
  * @returns {string} HTML email body
  */
 const buildChallanEmailHTML = (challan) => {
+  const documentTitle = challan.type === 'Challan' ? 'CHALLAN' : 'SHOWCAUSE NOTICE';
   const violationRows = challan.violationType.map((v, i) => `
     <tr>
       <td style="padding: 8px 12px; border: 1px solid #ddd;">${i + 1}</td>
@@ -107,7 +108,7 @@ const buildChallanEmailHTML = (challan) => {
       </div>
       
       <div style="padding: 24px;">
-        <h2 style="text-align: center; color: #1a3a5c; margin-bottom: 20px; font-size: 22px; border-bottom: 2px solid #1a3a5c; padding-bottom: 10px;">${challan.type === 'Fine' ? 'NOTICE' : 'CHALLAN'}</h2>
+        <h2 style="text-align: center; color: #1a3a5c; margin-bottom: 20px; font-size: 22px; border-bottom: 2px solid #1a3a5c; padding-bottom: 10px;">${documentTitle}</h2>
         
         <table style="width: 100%; margin-bottom: 16px; font-size: 14px;">
           <tr>
@@ -151,9 +152,11 @@ const buildChallanEmailHTML = (challan) => {
           </tbody>
         </table>
 
-        <div style="background: #d4edda; border: 1px solid #28a745; border-radius: 4px; padding: 12px 16px; margin-bottom: 16px; font-size: 16px; text-align: center;">
-          <strong>Fine Amount: ₹${challan.fineAmount.toLocaleString('en-IN')}</strong>
-        </div>
+        ${challan.type === 'Challan' ? `
+          <div style="background: #d4edda; border: 1px solid #28a745; border-radius: 4px; padding: 12px 16px; margin-bottom: 16px; font-size: 16px; text-align: center;">
+            <strong>Fine Amount: ₹${challan.fineAmount.toLocaleString('en-IN')}</strong>
+          </div>
+        ` : ''}
 
         <div style="margin-top: 24px; font-size: 13px;">
           <p><strong>Enforcement Officer:</strong> ${challan.officerName}</p>

@@ -31,8 +31,7 @@ const generatePdfHtml = (challan, photoBase64) => {
   const issuedAt = formatDateTime(challan.createdAt || challan.dateTime);
 
   // Determine document type label
-  const docType = challan.type || 'Challan';
-  const titleText = docType === 'Fine' ? 'NOTICE' : 'CHALLAN';
+  const titleText = challan.type === 'Challan' ? 'CHALLAN' : 'SHOWCAUSE NOTICE';
 
   const violationRows = challan.violationType.map((v, i) => `
     <tr>
@@ -101,10 +100,11 @@ const generatePdfHtml = (challan, photoBase64) => {
         </tbody>
       </table>
 
-      <!-- Fine Amount -->
-      <div style="text-align:center; border:2px solid #000; padding:6px; margin:6px 0; background:#f0f0f0;">
-        <strong style="font-size:13px;">Fine Amount: ₹${challan.fineAmount.toLocaleString('en-IN')}</strong>
-      </div>
+      ${challan.type === 'Challan' ? `
+        <div style="text-align:center; border:2px solid #000; padding:6px; margin:6px 0; background:#f0f0f0;">
+          <strong style="font-size:13px;">Fine Amount: ₹${challan.fineAmount.toLocaleString('en-IN')}</strong>
+        </div>
+      ` : ''}
 
       <!-- Photo Evidence -->
       ${photoSection}
